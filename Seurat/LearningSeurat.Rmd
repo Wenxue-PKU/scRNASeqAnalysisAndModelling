@@ -1,0 +1,245 @@
+---
+title: "Learning Seurat"
+author: "Axel Almet"
+date: "04/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(Seurat)
+library(SeuratData)
+library(ggplot2)
+library(patchwork)
+```
+
+This file details all of our attempts to familiarise myself with the popular single-cell RNA-seq (scRNA-seq) analysis package, [Seurat](https://satijalab.org/seurat/).
+
+## Guided clustering tutorial
+
+Essentially, we are following the [Seurat tutorial](https://satijalab.org/seurat/v3.1/pbmc3k_tutorial.html) on analysis of the scRNA-seq dataset of the PBMC_3k dataset from 10X genomics. Namely, we look at clustering and normalisation. Let's first load teh dataset
+
+```{r load data}
+# Load the dataset
+pbmc.data <- Read10X(data.dir="~/Documents/SingleCellRNASeq/Data/filtered_gene_bc_matrices/hg19/")
+
+# Initialise the Seurat object (with the raw, non-normalised data)
+pbmc <- CreateSeuratObject(counts = pbmc.data, project="pbmc3k", min.cells = 3, min.features = 200)
+pbmc
+```
+
+This is what the matrix looks like
+```{r first 30 rows}
+# Lot of zeros...
+pbmc.data[c("CD3D", "TCL1A", "MS4A1"), 1:30]
+```
+
+Show the metadata for the first five cells.
+```{r metadata first 5 cells}
+head(pbmc@meta.data, 5) # Show the metadata for the first five cells
+```
+
+We use quality control (QC) plots to determine how we should filter out certain genes. See [Ilicic et al. (2016)](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0888-1) for more info. Examples of QC metrics include:
+Low-quality/empty droplets have very few genes
+* Cell doublets/multiplets have an unusually-high gene count, i.e. you could mistake multiple cells for a single cell.
+* Low-quality/dying cells often exhibit extensive mitochondrial contamination.
+* The total number of molecules detected correlates strongly with the number of unique genes.
+
+Let's first calculate what percentage of genes within each cell are associated with mitochondrical genes
+```{r mt genes}
+pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, pattern="^MT-") # The [[]] operator adds columns to store metadata
+```
+
+We examine Violin plots of certain QC metrics, such as the unique feature counts and % of mitochondrial genes.
+
+```{r viol plot}
+VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+We can also examine how these features relate to each other using the FeatureScatter function. The function also seems to calculate the Pearson coefficient.
+```{r feature-feature}
+plot1 <- FeatureScatter(pbmc, feature1="nCount_RNA", feature2="percent.mt")
+plot2 <- FeatureScatter(pbmc, feature1="nCount_RNA", feature2="nFeature_RNA")
+plot1 + plot2
+```
+
+We will filter out cells that have more than 2, 5000 unique feature counts or less than 200 unique feature counts, or  and cells with more than 5% mitochondrial counts.
+```{r filter}
+pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
+```
+After filtering, we now normalise the data. We employ a global-scaling normalisation method called 'LogNormalize', where we normalise the feature expression measurements for each cell by the total epxression, multiply the resulting normalisation by a scale factor (usually 10, 000), then take the log. Normalised values are stored in pmbc[["RNA"]]@data.
+```{r normalise}
+pbmc <- NormalizeData(pbmc, normalization.method = "LogNormalize", scale.factor = 10000) # This method and scale factor are actually the default
+```
+
+We now calculate and identify a subset of features that exhibit high cell-to-cell variation in the dataset. That is, features that are expressed highly in some cells, and expressed lowly in others. The [claim](https://www.nature.com/articles/nmeth.2645) is that this helps to highlight biological signal in downstream analysis. Seurat's method is to model the variance of expression as a function of the mean expression within cells. The features returned are then used in downstream analysis like Principal Component Analysis (PCA). We will also highlight the 10 most highly variable genes.
+ 
+```{r variable features}
+pbmc <- FindVariableFeatures(pbmc, selection.method="vst", nfeatures = 2000)
+
+top10 <- head(VariableFeatures(pbmc), 10) # Identify the top 10 most variable genes
+
+# Plot the variable features, unlabelled and unlabelled.
+plot1 <- VariableFeaturePlot(pbmc)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+# plot1 + plot2
+plot2
+```
+
+Before applying dimensional reduction techniques like PCA or UMAP, it's convention to scale the data via a linear transformation. The ScaleData function shifts the expression of each gene, such that the mean expression across cells is 0 and scales the expression across each gene so that the variance across cells is 1. Scaling the variance gives equal weight in the downstream analysis, so that the highly-expressed genes do not dominate. These results can be accessed in pbmc[["RNA"]]@scale.data
+
+```{r scale data}
+all.genes <- rownames(pbmc)
+pbmc <- ScaleData(pbmc, features = all.genes)
+```
+
+We will now perform PCA on the scaled data, which is a linear dimensional reduction technique. By default, the Seurat's PCA method uses the previously-determined variable features as input, but you can use different features if need be. Once the PCA has been run, we can visualise the results in a number of different ways, like 
+```{r calculate pca}
+pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
+print(pbmc[["pca"]], dims = 1:5, nfeatures = 5) # Print five genes from the first five PCA axes
+```
+
+Let's look at different ways of visualising the PCA results. 
+```{r pca visualisations}
+VizDimLoadings(pbmc, dim = 1:2, reduction = "pca") # For each PC axis, it shows which genes vary define the extremes of these dimensions.
+DimPlot(pbmc, reduction = "pca") # Scatter plot of the results using the first two PC axes
+DimHeatmap(pbmc, dims = 1, cells = 500, balanced = TRUE) # Truth be told, I have no idea what these heat maps are supposed to tell me. I guess we're looking for where the heterogeneity occurs.
+DimHeatmap(pbmc, dims = 1:15, cells = 500, balanced = TRUE) # Truth be told, I have no idea what these heat maps are supposed to tell me. I guess we're looking for where the heterogeneity occurs.
+```
+
+To cluster cells, Seurat runs an algorithm based on the PCA scores, where the principal components represent 'metafeature' that combines information across featured sets. This helps alleviate the challenge of the extensive technical noice inherent in any scRNA-seq data set. One of the key challenges is to determine the 'dimensionality' of the dataset. That is, how many of the principal components, as determined by the PCA, should we retain when running the rest of our clustering analysis? 
+
+In order to determine which principal components are most significant, we implement a resampling test based on the JackStraw procedure, as detailed in [Macosko et al.](https://www.cell.com/fulltext/S0092-8674(15)00549-8). The method randomly permutes a subset of the data (default is 1% of the data) and reruns the PCA, which constructs a 'null distribution' of feature scores. This procedure is repeated over a number of replicates and the principal components that have a strong enrichment of low p-values are deemed as significant.
+
+```{r compute significant PCs}
+pbmc <- JackStraw(pbmc, num.replicate = 100)
+pbmc <- ScoreJackStraw(pbmc, dims = 1:20)
+```
+
+Useful plots to visualise the results of the JackStraw procedure include the JackStraw plot, which shows the distribution of p-values for each PC and the Elbow plot, which ranks the PCs based on the amount of the variance explained by each PC. THe idea for the former is that you'll start to see where the distributions start dropping off and stop being significant, i.e. high p-values, while for the latter, you'll see an 'elbow' indicating a cut-off in significance as well.
+```{r jackstraw and elbow plots}
+JackStrawPlot(pbmc, dims = 1:20)
+ElbowPlot(pbmc)
+```
+
+From these plots, we can see that we start seeing drop-offs in significance around PC 10-12. In general though, determining the dimensionality of the dataset is much more art than science. The Seurat team recommends three approaches to consider: 
+1. Explore the PCs to determine relevant sources of heterogeneity. This approach could be used in conjunction with a Gene Set Enrichment Analysis (GSEA), for example. This approach would be considered more 'supervised', as you really have to inspect the plots/metrics yourself to make a call. This is what the DimHeatmap is for. 
+2. Implement a statistical test based on a random null model, which will return a PC cutoff based on significance values. However, this approach can take longer for larger datasets and there may not always be a clear PC cutoff. This is what the JackStraw method is based on.
+3. The third is to use a heuristic that can be calculated instantly, such as the Elbow plot. 
+
+For this dataset, all three of the above approaches (PCs, JackStraw, Elbow plots) all returned similar results. Based on the results, PC 10 looks like a good cut-off, but there are some other aspects to consider more generally:
+* Sometimes one may recognise rare subsets based on genetic markers, which can be seen in the heat maps. This is where prior knowlege of the biology comes into play.
+* IT's worth repeating the clustering with varying numbers of PCs to test robustness (kind of like convergence tests for numerics). For this dataset, increasing the PCs from 10 to 15, 20, or even 50 doesn't change things too much.
+* If you have to make a call, choose higher rather than lower number of PCs. For instance, if you chose only 5 PCs, you'd affect the results in a significant AND adverse way.
+
+We're now in a position where we're ready to cluster the cells, i.e. the gene-cell matrix. Seurat's clustering uses a graph-based approach, where cells are embedded in a graph structure, such as a K-nearest-neighbour (KNN) graph, where edges are drawn between cells that have similar feature expression patterns. The resulting graph is then partitioned into cliques/communities.
+
+Seurat's method is as follows. First, a KNN graph is constructed based on the Euclidean distance between cells in PCA space. Edge weights between any two cells is refined based on the shared overlap, i.e. the Jaccard similarity:
+$$
+J(A, B) = \frac{|A\cap B|}{|A\cup B|}.
+$$
+In particular, neighbours are determined using the chosen PC dimensions as input. Clustering is determined using a modularity optimisation algorithm, using either the Louvain method (default) or the Smart Local Moving (SLM) method to group cells iteratively. This part requires us to specify a resolution parameter that sets the 'granularity' of the downstream clustering. Increasing the value of this resolution parameter results in a greater number of cell clusters. For larger datasets, optimal resolution often increases.
+
+```{r calculate clusters}
+pbmc <- FindNeighbors(pbmc, dims = 1:10)
+pbmc <- FindClusters(pbmc, resolution = 0.5) # Seurat says that a parameter value between 0.4 and 1.2 for single-cell datasets of around 3k cells (weird that it's only dependent on the number.)
+head(Idents(pbmc), 5)
+```
+
+If we've done our clustering correctly, when we now run nonlinear dimensional reduction, like tSNE or UMAP, the clusters should show up.
+```{r plot umap and tsne, fig.width=}
+pbmc <- RunUMAP(pbmc, dims = 1:10)
+pbmc <- RunTSNE(pbmc, dims = 1:10)
+```
+
+We can plot the results now.As you can see, tSNE and UMAP look very different, in terms of spacing, although the clustered groups seem to be the same. 
+```{r plot umap and tsne, }
+DimPlot(pbmc, reduction = "tsne")
+DimPlot(pbmc, reduction = "umap")
+```
+
+Having identified clusters, we're now in a position where we can identify different markers associated with each cluster.
+
+## Integration with spatial data (Visium)
+
+We will work with a dataset of sagital mouse brain slices from the Visium datasets by 10X Genomics. We recreate the following [tutorial](https://satijalab.org/seurat/v3.1/spatial_vignette.html) by the Seurat team. First, let's load the data.
+```{r load spatial data}
+# InstallData("stxBrain")
+brain <- LoadData("stxBrain", type = "anterior1")
+```
+
+First, let's plot the distribution of molecular counts per spot, demonstrating the huge heterogeneity across space in molecular count.
+```{r plot spatial data counts}
+plot1 <- VlnPlot(brain, features = "nCount_Spatial", pt.size = 0.1) + NoLegend()
+plot2 <- SpatialFeaturePlot(brain, features = "nCount_Spatial") + theme(legend.position = "right")
+wrap_plots(plot1, plot2)
+```
+
+The point of the plots is to show not only the large in molecular count, but also to show how the distribution is very clearly dependent on anatomy as well. This necessitates a different type of normalisation, one that isn't just the standard Log-transform. Essentially the potential weighting effects of teh different spatial regions need to be better accounted for. We use something called sctransform, which is based on a [regularised negative binomial rgression](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1874-1) and seems to do pretty well. The function SCTransform normalises the data, detects high-variance features and stores the output in an "SCT" assay.
+
+```{r transform brain data}
+brain <- SCTransform(brain, assay = "Spatial", verbose = FALSE)
+```
+
+The nice thing about Seurat is we can visualise specific genes on top of the tissue H&E slides. This is a nice feature where we can see where genes are specifically expressed across the tissue. We can also adjust the size and transparency of the spots used to visualise the (normalised) molecular counts. This use of a VT as receptors explains why Qing said to represent the receptors are specific spots. 
+```{r visualise genes on slides}
+SpatialFeaturePlot(brain, features = c("Hpca", "Ttr"))
+p1 <- SpatialFeaturePlot(brain, features = "Ttr", pt.size.factor = 1) # Default is 1.6
+p2 <- SpatialFeaturePlot(brain, features = "Ttr", alpha = c(0.1, 1)) # Default is c(1,1).
+p1 + p2
+```
+
+The next few steps essentially go through the previous clustering steps that were considered in the previous tutorial. There's not as much detail in the Seurat tutorial, so let's fill in the gaps. We first run a PCA to get a feel for the 'dimensionality' of the dataset.
+
+```{r calculate brain pca}
+brain <- RunPCA(brain, assay = "SCT", verbose = FALSE)
+print(brain[["pca"]], dims = 1:5, nfeatures = 5) # Print five genes from the first five PCA axes
+```
+
+```{r brain pca visualisations}
+VizDimLoadings(brain, dim = 1:2, reduction = "pca") # For each PC axis, it shows which genes vary define the extremes of these dimensions.
+DimPlot(brain, reduction = "pca") # Scatter plot of the results using the first two PC axes
+DimHeatmap(brain, dims = 1, cells = 500, balanced = TRUE) # Truth be told, I have no idea what these heat maps are supposed to tell me. I guess we're looking for where the heterogeneity occurs.
+DimHeatmap(brain, dims = 1:30, cells = 500, balanced = TRUE) # Truth be told, I have no idea what these heat maps are supposed to tell me. I guess we're looking for where the heterogeneity occurs.
+```
+
+```{r compute brain significant PCs}
+# brain <- JackStraw(brain, num.replicate = 100)
+brain <- ScoreJackStraw(brain, dims = 1:20)
+```
+
+```{r brain jackstraw and elbow plots}
+jackstrawplot <- JackStrawPlot(brain, dims = 1:20)
+elbowplot <- ElbowPlot(brain)
+jackstrawplot + elbowplot
+```
+
+Based on the JackStrawPlot, the dimensionality is up to about PC 12, but the ElbowPlot suggest the dimensionality may be higher. Let's consider both cases.
+```{r run clustering for brain PC 12}
+brain <- FindNeighbors(brain, reduction = "pca", dims = 1:12) # I'm not sure why it's for 30 dimensions, when teh JackstrawPlot and ElbowPlot suggest up to PC 10 is enough.
+brain <- FindClusters(brain, verbose = FALSE)
+brain <- RunUMAP(brain, reduction = "pca", dims = 1:12)
+p1 <- DimPlot(brain, reduction = "umap", label = TRUE)
+p2 <- SpatialDimPlot(brain, label = TRUE, label.size = 3)
+p1 + p2
+```
+And now for a higher assumed dimensionality.
+
+```{r run clustering for brain PC 30}
+brain <- FindNeighbors(brain, reduction = "pca", dims = 1:30) # I'm not sure why it's for 30 dimensions, when teh JackstrawPlot and ElbowPlot suggest up to PC 10 is enough.
+brain <- FindClusters(brain, verbose = FALSE)
+brain <- RunUMAP(brain, reduction = "pca", dims = 1:30)
+p1 <- DimPlot(brain, reduction = "umap", label = TRUE)
+p2 <- SpatialDimPlot(brain, label = TRUE, label.size = 3)
+p1 + p2
+```
+
+So there isn't relaly a noticeable difference between using 10 and 30 PCs. Note that Seurat also allows us to highlight individual cell types identified by the clustering.
+```{r highlight cells from umap}
+SpatialDimPlot(brain, cells.highlight = CellsByIdentities(object = brain, idents = c(1, 2, 5, 3, 4, 8)), facet.highlight = TRUE, ncol = 3)
+```
+
+Having clustered the data, we can now identify molecular features that correlate with different spatial regions within the tissue, i.e. they may serve tissue-specific functions. There's twya workflows offered by Seurat to do this.
+1. Perform differential expression based on pre-annotated anatomical regions within the tissue, which you can either determine by unsupervised clustering or prior knowledge.
+2. The second is to search for features that vary spatially in the absence of any pre-annotations. The underlying algorithm here models spatial variation as a point process across the tissue and computes a 'variogram' that identifies genes whose expression varies across space. 
