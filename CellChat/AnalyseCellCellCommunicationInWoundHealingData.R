@@ -68,6 +68,26 @@ netAnalysis_river(unwounded.cc, pattern = "outgoing")
 # Visualize the communication pattern using dot plot
 netAnalysis_dot(unwounded.cc, pattern = "outgoing")
 
+# Now let's look at incoming patterns
+nPatterns <- 5
+unwounded.cc <- identifyCommunicationPatterns(unwounded.cc, pattern = "incoming", k = nPatterns)
+
+netAnalysis_river(unwounded.cc, pattern = "incoming")
+
+netAnalysis_dot(unwounded.cc, pattern = "incoming")
+
+# We now identify signalling groups based on functional similarity, which is when the sender/receiver groups are similar
+unwounded.cc <- computeNetSimilarity(unwounded.cc, type = "functional", thresh = 0.25)
+unwounded.cc <- netEmbedding(unwounded.cc, type = "functional")
+unwounded.cc <- netClustering(unwounded.cc, type = "functional", k = 5)
+netVisual_embedding(unwounded.cc, type = "functional", pathway.remove.show = F, label.size = 3.5)
+
+# We now identify signalling groups based on structural simlarity, which is to consider the signalling network structure
+unwounded.cc <- computeNetSimilarity(unwounded.cc, type = "structural", thresh = 0.25)
+unwounded.cc <- netEmbedding(unwounded.cc, type = "structural")
+unwounded.cc <- netClustering(unwounded.cc, type = "structural")
+netVisual_embedding(unwounded.cc, type = "structural", label.size = 3.5)
+
 ### We now look at the wounded data to compare the differences in cell-cell communications
 load(file = "~/Documents/CellCellCommunicationModelling/Data/Haensel2020/sw_cca.rdata") # Load the data, which includes a Seurat V2 object
 ep <- UpdateSeuratObject(object = ep) # Update this object from Seurat V2 to a V3 object
@@ -76,9 +96,16 @@ ep <- UpdateSeuratObject(object = ep) # Update this object from Seurat V2 to a V
 wounded.data.input <- GetAssayData(ep, assay = "RNA", slot = "data")  # Normalised data matrix
 # wounded.data.input <- ep@data
 wounded.labels <- Idents(ep)  # Get the cell group labels
+levels(wounded.labels) <- c("Epidermal basal", "Proliferative epidermal basal", "Epidermal spinous", "HF/HFSC", "Fibroblast I", "Fibroblast II", "Myofibroblast", "Macrophage I", "Macrophage II", "Macrophage III", "Dendritic/Langerhans cell", "T cell", "Endothelial", "Skeletal muscle")
 wounded.identity <- data.frame(group = wounded.labels, row.names = names(wounded.labels)) # Dataframe of the cell labels
 # wounded.identity <- data.frame(group = ep@ident, row.names = names(ep@ident))
 unique(wounded.identity$group)
+
+ep.old.idents <- levels(ep) # Just in case
+ep.new.idents <-c("Epidermal basal", "Proliferative epidermal basal", "Epidermal spinous", "HF/HFSC", "Fibroblast I", "Fibroblast II", "Myofibroblast", "Macrophage I", "Macrophage II", "Macrophage III", "Dendritic/Langerhans cell", "T cell", "Endothelial", "Skeletal muscle")
+names(ep.new.idents) <- ep.old.idents
+
+ep <- RenameIdents(ep, ep.new.idents) # Rename the labels to fix the typo
 
 # Create the CellChat object now
 wounded.cc <- createCellChat(data = wounded.data.input, do.sparse = F)
@@ -103,12 +130,124 @@ wounded.cc <- computeCommunProb(wounded.cc)
 wounded.cc <- computeCommunProbPathway(wounded.cc) # Calculate the probabilities at the signalling level
 wounded.cc <- aggregateNet(wounded.cc) # Calculates the aggregated cell-cell communication network by counting the links or summing the communication probabilities
 
-vertex.receiver <- seq(1,4) # Focus on the epidermal and HF cells on the left
+vertex.receiver <- c(5,6,7) # Focus on the fibroblasts
 pathways.show <- "TGFb" # All possible pathways are stored in @netP$pathways
-p2 <- netVisual_aggregate(wounded.cc, signaling = pathways.show,  vertex.receiver = vertex.receiver, layout = "circle", vertex.size = woundedGroupSize)
+netVisual_aggregate(wounded.cc, signaling = pathways.show, vertex.receiver = vertex.receiver, layout = "circle", vertex.size = woundedGroupSize, pt.title=32)
 netAnalysis_contribution(wounded.cc, signaling = pathways.show) # Show the primary contributors to the selected pathway
 
+# Let's now look at the signalling roles of each cell group
+wounded.cc <- netAnalysis_signalingRole(wounded.cc, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
+netVisual_signalingRole(wounded.cc, signaling = pathways.show, width = 12, height = 2.5, font.size = 10) # Visualise the roles
+
+# Now we identify outgoing communication patterns
+nPatterns <- 5
+wounded.cc <- identifyCommunicationPatterns(wounded.cc, pattern = "outgoing", k = nPatterns)
+
+# Visualize the communication pattern using river plot
+netAnalysis_river(wounded.cc, pattern = "outgoing") 
+
+# Visualize the communication pattern using dot plot
+netAnalysis_dot(wounded.cc, pattern = "outgoing")
+
+# Now let's look at incoming patterns
+nPatterns <- 5
+wounded.cc <- identifyCommunicationPatterns(wounded.cc, pattern = "incoming", k = nPatterns)
+
+netAnalysis_river(wounded.cc, pattern = "incoming")
+
+netAnalysis_dot(wounded.cc, pattern = "incoming")
+
+# We now identify signalling groups based on functional similarity, which is when the sender/receiver groups are similar
+wounded.cc <- computeNetSimilarity(wounded.cc, type = "functional", thresh = 0.25)
+wounded.cc <- netEmbedding(wounded.cc, type = "functional")
+wounded.cc <- netClustering(wounded.cc, type = "functional", k = 5)
+netVisual_embedding(wounded.cc, type = "functional", pathway.remove.show = F, label.size = 3.5)
+
+# We now identify signalling groups based on structural simlarity, which is to consider the signalling network structure
+wounded.cc <- computeNetSimilarity(wounded.cc, type = "structural", thresh = 0.25)
+wounded.cc <- netEmbedding(wounded.cc, type = "structural")
+wounded.cc <- netClustering(wounded.cc, type = "structural")
+netVisual_embedding(wounded.cc, type = "structural", label.size = 3.5)
+
 save(unwounded.cc, wounded.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020cellchat.rdata")
+load("~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020cellchat.rdata")
+
+### Run CellChat on the subsetted data
+
+# Subset the wounded data for just fibroblasts and immune cells
+ep.subsetted <- subset(ep, idents = c("Fibroblast I", "Fibroblast II", "Myofibroblast", "Macrophage I",
+                                      "Macrophage II", "Macrophage III", "Dendritic/Langerhans cell", "T cell"))
+
+# We need to get the normalised gene expression matrix and the cell group labels to create the CellChat object
+wounded.subsetted.data.input <- GetAssayData(ep.subsetted, assay = "RNA", slot = "data")  # Normalised data matrix
+# wounded.data.input <- ep@data
+wounded.subsetted.labels <- Idents(ep.subsetted)  # Get the cell group labels
+wounded.subsetted.identity <- data.frame(group = wounded.subsetted.labels, row.names = names(wounded.subsetted.labels)) # Dataframe of the cell labels
+# wounded.identity <- data.frame(group = ep@ident, row.names = names(ep@ident))
+unique(wounded.subsetted.identity$group)
+
+# Create the CellChat object now
+wounded.subsetted.cc <- createCellChat(data = wounded.subsetted.data.input, do.sparse = F)
+
+# Add the meta-data from Seurat
+wounded.subsetted.cc <- addMeta(wounded.subsetted.cc, meta = wounded.subsetted.identity, meta.name = "labels") 
+wounded.subsetted.cc <- setIdent(wounded.subsetted.cc, ident.use = "labels") # Set the labels to be the default cell identity
+
+woundedSubsettedGroupSize <- as.numeric(table(wounded.subsetted.cc@idents)) # Get the number of cells in each group
+
+wounded.subsetted.cc@DB <- CellChatDB.use # Set the database for the unwounded data
+
+# We now identify over-expressed ligands/receptors in a cell group and then project gene expression data onto the protein-protein interaction network
+wounded.subsetted.cc <- subsetData(wounded.subsetted.cc) # We subset the expression data of signalling genes to save on computational cost
+wounded.subsetted.cc <- identifyOverExpressedGenes(wounded.subsetted.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
+wounded.subsetted.cc <- identifyOverExpressedInteractions(wounded.subsetted.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
+wounded.subsetted.cc <- projectData(wounded.subsetted.cc, PPI.mouse) # Other option includes PPI.human
+
+# We now infer the cell-cell communication network by calculating the communication probabilities
+wounded.subsetted.cc <- computeCommunProb(wounded.subsetted.cc) 
+wounded.subsetted.cc <- computeCommunProbPathway(wounded.subsetted.cc) # Calculate the probabilities at the signalling level
+wounded.subsetted.cc <- aggregateNet(wounded.subsetted.cc) # Calculates the aggregated cell-cell communication network by counting the links or summing the communication probabilities
+
+vertex.receiver <- c(1, 2, 3) # Focus on the fibroblasts
+pathways.show <- "TGFb" # All possible pathways are stored in @netP$pathways
+netVisual_aggregate(wounded.subsetted.cc, signaling = pathways.show, vertex.receiver = vertex.receiver, layout = "circle", vertex.size = woundedSubsettedGroupSize, pt.title=32)
+netAnalysis_contribution(wounded.subsetted.cc, signaling = pathways.show) # Show the primary contributors to the selected pathway
+
+# Let's now look at the signalling roles of each cell group
+wounded.subsetted.cc <- netAnalysis_signalingRole(wounded.subsetted.cc, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
+netVisual_signalingRole(wounded.subsetted.cc, signaling = pathways.show, width = 12, height = 2.5, font.size = 10) # Visualise the roles
+
+# Now we identify outgoing communication patterns
+nPatterns <- 5
+wounded.subsetted.cc <- identifyCommunicationPatterns(wounded.subsetted.cc, pattern = "outgoing", k = nPatterns)
+
+# Visualize the communication pattern using river plot
+netAnalysis_river(wounded.subsetted.cc, pattern = "outgoing") 
+
+# Visualize the communication pattern using dot plot
+netAnalysis_dot(wounded.subsetted.cc, pattern = "outgoing")
+
+# Now let's look at incoming patterns
+nPatterns <- 5
+wounded.subsetted.cc <- identifyCommunicationPatterns(wounded.subsetted.cc, pattern = "incoming", k = nPatterns)
+
+netAnalysis_river(wounded.subsetted.cc, pattern = "incoming")
+
+netAnalysis_dot(wounded.subsetted.cc, pattern = "incoming")
+
+# We now identify signalling groups based on functional similarity, which is when the sender/receiver groups are similar
+wounded.subsetted.cc <- computeNetSimilarity(wounded.subsetted.cc, type = "functional", thresh = 0.25)
+wounded.subsetted.cc <- netEmbedding(wounded.subsetted.cc, type = "functional")
+wounded.subsetted.cc <- netClustering(wounded.subsetted.cc, type = "functional", k = 4)
+netVisual_embedding(wounded.subsetted.cc, type = "functional", pathway.remove.show = F, label.size = 3.5)
+
+# We now identify signalling groups based on structural simlarity, which is to consider the signalling network structure
+wounded.subsetted.cc <- computeNetSimilarity(wounded.subsetted.cc, type = "structural", thresh = 0.25)
+wounded.subsetted.cc <- netEmbedding(wounded.subsetted.cc, type = "structural")
+wounded.subsetted.cc <- netClustering(wounded.subsetted.cc, type = "structural")
+netVisual_embedding(wounded.subsetted.cc, type = "structural", label.size = 3.5)
+
+save(wounded.subsetted.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020woundedsubcellchat.rdata")
 
 ### We now look at the large-wounded data (PWD12) from Guerrero-Juarez et al. (2019)
 load(file = "~/Documents/CellCellCommunicationModelling/Data/GuerreroJuarez2019/10X_wounded_PWD12.rdata") # Load the data, which includes a Seurat V2 object
@@ -117,7 +256,7 @@ ep <- UpdateSeuratObject(object = ep) # Update this object from Seurat V2 to a V
 # We need to get the normalised gene expression matrix and the cell group labels to create the CellChat object
 pwd12.data.input <- GetAssayData(ep, assay = "RNA", slot = "data")  # Normalised data matrix
 pwd12.labels <- Idents(ep)  # Get the cell group labels
-levels(pwd12.labels) <- c("Fibroblast I", "Fibroblast II", "Myeloid cell", "Fibroblast III", "Endothelial", "Fibroblast IV", "T lymphocyte", "B lymphocyte", "Fibroblst V", "Schwann cell", "Erythrocyte", "Dendritic cell", "Lymphatic endothelial cell")
+levels(pwd12.labels) <- c("Fibroblast I", "Fibroblast II", "Myeloid cell", "Fibroblast III", "Endothelial", "Fibroblast IV", "T lymphocyte", "B lymphocyte", "Fibroblast V", "Schwann cell", "Erythrocyte", "Dendritic cell", "Lymphatic endothelial cell")
 pwd12.identity <- data.frame(group = pwd12.labels, row.names = names(pwd12.labels)) # Dataframe of the cell labels
 unique(pwd12.identity$group)
 
@@ -134,7 +273,6 @@ pwd12.cc@DB <- CellChatDB.use # Set the database for the unwounded data
 
 # We now identify over-expressed ligands/receptors in a cell group and then project gene expression data onto the protein-protein interaction network
 pwd12.cc <- subsetData(pwd12.cc) # We subset the expression data of signalling genes to save on computational cost
-future::plan("multiprocess", workers = 4) # Run in parallel as well
 pwd12.cc <- identifyOverExpressedGenes(pwd12.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 pwd12.cc <- identifyOverExpressedInteractions(pwd12.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
 pwd12.cc <- projectData(pwd12.cc, PPI.mouse) # Other options includes PPI.human
@@ -146,7 +284,43 @@ pwd12.cc <- aggregateNet(pwd12.cc) # Calculates the aggregated cell-cell communi
 
 vertex.receiver <- c(1, 2, 4, 6, 9) # Focus on the epidermal and HF cells on the left
 pathways.show <- "TGFb" # All possible pathways are stored in @netP$pathways
-netVisual_aggregate(pwd12.cc, signaling = pathways.show,  vertex.receiver = vertex.receiver, vertex.size = pwd12GroupSize)
+netVisual_aggregate(pwd12.cc, signaling = pathways.show,  vertex.receiver = vertex.receiver, layout="circle", vertex.size = pwd12GroupSize)
 netAnalysis_contribution(pwd12.cc, signaling = pathways.show) # Show the primary contributors to the selected pathway
 
+# Let's now look at the signalling roles of each cell group
+pwd12.cc <- netAnalysis_signalingRole(pwd12.cc, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
+netVisual_signalingRole(pwd12.cc, signaling = pathways.show, width = 12, height = 2.5, font.size = 10) # Visualise the roles
+
+# Now we identify outgoing communication patterns
+nPatterns <- 4
+pwd12.cc <- identifyCommunicationPatterns(pwd12.cc, pattern = "outgoing", k = nPatterns)
+
+# Visualize the communication pattern using river plot
+netAnalysis_river(pwd12.cc, pattern = "outgoing") 
+
+# Visualize the communication pattern using dot plot
+netAnalysis_dot(pwd12.cc, pattern = "outgoing")
+
+# Now let's look at incoming patterns
+nPatterns <- 5
+pwd12.cc <- identifyCommunicationPatterns(pwd12.cc, pattern = "incoming", k = nPatterns)
+
+netAnalysis_river(pwd12.cc, pattern = "incoming")
+
+netAnalysis_dot(pwd12.cc, pattern = "incoming")
+
+# We now identify signalling groups based on functional similarity, which is when the sender/receiver groups are similar
+pwd12.cc <- computeNetSimilarity(pwd12.cc, type = "functional", thresh = 0.25)
+pwd12.cc <- netEmbedding(pwd12.cc, type = "functional")
+pwd12.cc <- netClustering(pwd12.cc, type = "functional", k = 4)
+netVisual_embedding(pwd12.cc, type = "functional", pathway.remove.show = F, label.size = 3.5)
+
+# We now identify signalling groups based on structural simlarity, which is to consider the signalling network structure
+pwd12.cc <- computeNetSimilarity(pwd12.cc, type = "structural", thresh = 0.25)
+pwd12.cc <- netEmbedding(pwd12.cc, type = "structural")
+pwd12.cc <- netClustering(pwd12.cc, type = "structural")
+netVisual_embedding(pwd12.cc, type = "structural", label.size = 3.5)
+
 save(pwd12.cc, file = "~/Documents/CellCellCommunicationModelling/Data/GuerreroJuarez2019/guerrerojuarez2019cellchat.rdata")
+load("~/Documents/CellCellCommunicationModelling/Data/GuerreroJuarez2019/guerrerojuarez2019cellchat.rdata")
+
