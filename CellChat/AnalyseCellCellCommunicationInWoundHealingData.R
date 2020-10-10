@@ -12,7 +12,7 @@ library(ggalluvial)
 ### Set the ligand-receptor database. Here we will use the "Secreted signalling" database for cell-cell communication (let's look at ECM-receptor in the future )
 CellChatDB <- CellChatDB.mouse # The othe roption is CellChatDB.human
 showDatabaseCategory(CellChatDB)
-CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling") # Other options include ECM-Receptor and Cell-Cell Contact
+CellChatDB.use <- subsetDB(CellChatDB, search = "Cell-Cell Contact") # Other options include ECM-Receptor and Cell-Cell Contact
 
 ### Let's first look at the unwounded data from Haensel et al. (2020)
 load(file = "~/Documents/CellCellCommunicationModelling/Data/Haensel2020/bs_cca.rdata") # Load the data, which includes a Seurat V2 object
@@ -34,36 +34,38 @@ unwounded.cc <- setIdent(unwounded.cc, ident.use = "labels") # Set the labels to
 
 unwoundedGroupSize <- as.numeric(table(unwounded.cc@idents)) # Get the number of cells in each group
 
+# Set the current object to be the 'secreted' cell chat data
+unwounded.cc.secreted <- unwounded.cc
+
 unwounded.cc@DB <- CellChatDB.use # Set the database for the unwounded data
 
 # We now identify over-expressed ligands/receptors in a cell group and then project gene expression data onto the protein-protein interaction network
-unwounded.cc <- subsetData(unwounded.cc) # We subset the expression data of signalling genes to save on computational cost
-future::plan("multiprocess", workers = 4) # Run in parallel as well
+# unwounded.cc <- subsetData(unwounded.cc) # We subset the expression data of signalling genes to save on computational cost
 unwounded.cc <- identifyOverExpressedGenes(unwounded.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 unwounded.cc <- identifyOverExpressedInteractions(unwounded.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
-unwounded.cc <- projectData(unwounded.cc, PPI.mouse) # Other option includes PPI.human
+# unwounded.cc <- projectData(unwounded.cc, PPI.mouse) # Other option includes PPI.human (we've been told maybe we don't need this for this data.)
 
 # We now infer the cell-cell communication network by calculating the communication probabilities
-unwounded.cc <- computeCommunProb(unwounded.cc) 
+unwounded.cc <- computeCommunProb(unwounded.cc, raw.use = TRUE, population.size = FALSE) 
 unwounded.cc <- computeCommunProbPathway(unwounded.cc) # Calculate the probabilities at the signalling level
 unwounded.cc <- aggregateNet(unwounded.cc) # Calculates the aggregated cell-cell communication network by counting the links or summing the communication probabilities
 
 # Plot the communications 
-vertex.receiver <- seq(1,9) # Focus on the epidermal and HF cells on the left
-pathways.show <- "TGFb" # All possible pathways are stored in @netP$pathways
-netVisual_aggregate(unwounded.cc, signaling = pathways.show,  vertex.receiver = vertex.receiver, layout = "circle", vertex.size = unwoundedGroupSize)
-netAnalysis_contribution(unwounded.cc, signaling = pathways.show) # Show the primary contributors to the selected pathway
+vertex.receiver <- c(1, 2, 3, 4) # Focus on the fibroblast cells
+pathways.show <- "FGF" # All possible pathways are stored in @netP$pathways
+netVisual_aggregate(unwounded.cc, signaling = pathways.show,  vertex.receiver = vertex.receiver, vertex.size = unwoundedGroupSize)
+netAnalysis_contribution(unwounded.cc.secreted, signaling = pathways.show) # Show the primary contributors to the selected pathway
 
 # Let's now look at the signalling roles of each cell group
-unwounded.cc <- netAnalysis_signalingRole(unwounded.cc, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
-netVisual_signalingRole(unwounded.cc, signaling = pathways.show, width = 12, height = 2.5, font.size = 10) # Visualise the roles
+unwounded.cc.secreted <- netAnalysis_signalingRole(unwounded.cc.secreted, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
+netVisual_signalingRole(unwounded.cc.secreted, signaling = pathways.show, width = 12, height = 2.5, font.size = 10) # Visualise the roles
 
 # Now we identify outgoing communication patterns
 nPatterns = 5 
 unwounded.cc <- identifyCommunicationPatterns(unwounded.cc, pattern = "outgoing", k = nPatterns)
 
 # Visualize the communication pattern using river plot
-netAnalysis_river(unwounded.cc, pattern = "outgoing") 
+netAnalysis_river(unwounded.cc.secreted, pattern = "outgoing") 
 
 # Visualize the communication pattern using dot plot
 netAnalysis_dot(unwounded.cc, pattern = "outgoing")
@@ -120,19 +122,18 @@ wounded.cc@DB <- CellChatDB.use # Set the database for the unwounded data
 
 # We now identify over-expressed ligands/receptors in a cell group and then project gene expression data onto the protein-protein interaction network
 wounded.cc <- subsetData(wounded.cc) # We subset the expression data of signalling genes to save on computational cost
-future::plan("multiprocess", workers = 4) # Run in parallel as well
 wounded.cc <- identifyOverExpressedGenes(wounded.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 wounded.cc <- identifyOverExpressedInteractions(wounded.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
-wounded.cc <- projectData(wounded.cc, PPI.mouse) # Other option includes PPI.human
+wounded.cc <- projectData(wounded.cc, PPI.mouse) # Other option includes PPI.human We're told that we may have to comment these out.
 
 # We now infer the cell-cell communication network by calculating the communication probabilities
-wounded.cc <- computeCommunProb(wounded.cc) 
+wounded.cc <- computeCommunProb(wounded.cc, raw.use = TRUE, population.size = FALSE) 
 wounded.cc <- computeCommunProbPathway(wounded.cc) # Calculate the probabilities at the signalling level
 wounded.cc <- aggregateNet(wounded.cc) # Calculates the aggregated cell-cell communication network by counting the links or summing the communication probabilities
 
 vertex.receiver <- c(5,6,7) # Focus on the fibroblasts
 pathways.show <- "TGFb" # All possible pathways are stored in @netP$pathways
-netVisual_aggregate(wounded.cc, signaling = pathways.show, vertex.receiver = vertex.receiver, layout = "circle", vertex.size = woundedGroupSize, pt.title=32)
+netVisual_aggregate(wounded.cc, signaling = pathways.show, vertex.receiver = vertex.receiver, vertex.size = woundedGroupSize, pt.title=32)
 netAnalysis_contribution(wounded.cc, signaling = pathways.show) # Show the primary contributors to the selected pathway
 
 # Let's now look at the signalling roles of each cell group
@@ -169,8 +170,29 @@ wounded.cc <- netEmbedding(wounded.cc, type = "structural")
 wounded.cc <- netClustering(wounded.cc, type = "structural")
 netVisual_embedding(wounded.cc, type = "structural", label.size = 3.5)
 
-save(unwounded.cc, wounded.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020cellchat.rdata")
+save(unwounded.cc, wounded.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020adjustedcellchat.rdata")
 load("~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020cellchat.rdata")
+
+# Merge the CellChat objects
+merged.cc <- mergeCellChat(list(unwounded.cc.secreted, wounded.cc), add.names = c("Unwounded", "Wounded"))
+
+save(merged.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020mergedadjustedcellchat.rdata")
+load("~/Documents/CellCellCommunicationModelling/Data/Haensel2020/haensel2020mergedadjustedcellchat.rdata")
+
+# Let's analyse for structural similarity
+merged.cc <- computeNetSimilarityPairwise(merged.cc, type = "structural")
+merged.cc <- netEmbedding(merged.cc, type = "structural")
+merged.cc <- netClustering(merged.cc, type = "structural")
+
+# Visualise the structural similarity
+netVisual_embeddingPairwise(merged.cc, type = "structural", dot.size = c(5, 15), label.size = 6) + theme(text=element_text(size=24), axis.text=element_text(size=24)) 
+netVisual_embeddingPairwiseZoomIn(merged.cc, type = "structural", dot.size = c(3, 9), label.size = 4) + coord_fixed() + theme(text=element_text(size=24), axis.text=element_text(size=24)) 
+
+# Visualise the pathway distance in the learnt joint manifold
+rankSimilarity(merged.cc, type = "structural") + theme(text=element_text(size=24), axis.text=element_text(size=24))
+
+# Identify and visualise the conserved and context-specified signalling pathways
+rankNet(merged.cc, mode = "comparison")
 
 ### Run CellChat on the subsetted data
 
@@ -201,10 +223,10 @@ wounded.subsetted.cc@DB <- CellChatDB.use # Set the database for the unwounded d
 wounded.subsetted.cc <- subsetData(wounded.subsetted.cc) # We subset the expression data of signalling genes to save on computational cost
 wounded.subsetted.cc <- identifyOverExpressedGenes(wounded.subsetted.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 wounded.subsetted.cc <- identifyOverExpressedInteractions(wounded.subsetted.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
-wounded.subsetted.cc <- projectData(wounded.subsetted.cc, PPI.mouse) # Other option includes PPI.human
+wounded.subsetted.cc <- projectData(wounded.subsetted.cc, PPI.mouse) # Other option includes PPI.human (optional step that Suoqin told us to maybe dismiss)
 
 # We now infer the cell-cell communication network by calculating the communication probabilities
-wounded.subsetted.cc <- computeCommunProb(wounded.subsetted.cc) 
+wounded.subsetted.cc <- computeCommunProb(wounded.subsetted.cc, raw.use = TRUE, population.size = FALSE) 
 wounded.subsetted.cc <- computeCommunProbPathway(wounded.subsetted.cc) # Calculate the probabilities at the signalling level
 wounded.subsetted.cc <- aggregateNet(wounded.subsetted.cc) # Calculates the aggregated cell-cell communication network by counting the links or summing the communication probabilities
 

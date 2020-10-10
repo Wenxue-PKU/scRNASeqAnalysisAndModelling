@@ -14,7 +14,6 @@ CellChatDB <- CellChatDB.mouse # The othe roption is CellChatDB.human
 showDatabaseCategory(CellChatDB)
 CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling") # Other options include ECM-Receptor and Cell-Cell Contact
 
-### Let's start with the fibrotic data first (just alphabetical)
 dataDirectory = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/Fibrotic/"
 
 fibrotic.data <- Read10X(data.dir=dataDirectory)
@@ -131,7 +130,7 @@ fibrotic.cc@DB <- CellChatDB.use # Set the database for the fibrotic data
 fibrotic.cc <- subsetData(fibrotic.cc) # We subset the expression data of signalling genes to save on computational cost
 fibrotic.cc <- identifyOverExpressedGenes(fibrotic.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 fibrotic.cc <- identifyOverExpressedInteractions(fibrotic.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
-fibrotic.cc <- projectData(fibrotic.cc, PPI.mouse) # Other option includes PPI.human
+# fibrotic.cc <- projectData(fibrotic.cc, PPI.mouse) # Other option includes PPI.human, apparently we shouldn't do this any more
 
 # We now infer the cell-cell communication network by calculating the communication probabilities
 fibrotic.cc <- computeCommunProb(fibrotic.cc) 
@@ -207,7 +206,7 @@ fibrotic.subsetted.cc@DB <- CellChatDB.use # Set the database for the fibrotic d
 fibrotic.subsetted.cc <- subsetData(fibrotic.subsetted.cc) # We subset the expression data of signalling genes to save on computational cost
 fibrotic.subsetted.cc <- identifyOverExpressedGenes(fibrotic.subsetted.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 fibrotic.subsetted.cc <- identifyOverExpressedInteractions(fibrotic.subsetted.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
-fibrotic.subsetted.cc <- projectData(fibrotic.subsetted.cc, PPI.mouse) # Other option includes PPI.human
+# fibrotic.subsetted.cc <- projectData(fibrotic.subsetted.cc, PPI.mouse) # Other option includes PPI.human
 
 # We now infer the cell-cell communication network by calculating the communication probabilities
 fibrotic.subsetted.cc <- computeCommunProb(fibrotic.subsetted.cc) 
@@ -375,7 +374,7 @@ regenerative.cc@DB <- CellChatDB.use # Set the database for the fibrotic data
 regenerative.cc <- subsetData(regenerative.cc) # We subset the expression data of signalling genes to save on computational cost
 regenerative.cc <- identifyOverExpressedGenes(regenerative.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 regenerative.cc <- identifyOverExpressedInteractions(regenerative.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
-regenerative.cc <- projectData(regenerative.cc, PPI.mouse) # Other option includes PPI.human
+# regenerative.cc <- projectData(regenerative.cc, PPI.mouse) # Other option includes PPI.human
 
 # We now infer the cell-cell communication network by calculating the communication probabilities
 regenerative.cc <- computeCommunProb(regenerative.cc) 
@@ -431,6 +430,12 @@ netVisual_embedding(regenerative.cc, type = "structural", label.size = 3.5)
 
 ### Save the CellChat objects for the FULL datasets
 save(fibrotic.cc, regenerative.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/gay2020cellchat.rdata")
+save(fibrotic.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/fibroticallcellchat.rdata")
+save(fibrotic.subsetted.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/fibroticsubsettedcellchat.rdata")
+save(regenerative.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/regenerativeallcellchat.rdata")
+save(regenerative.subsetted.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/regenerativesubsettedcellchat.rdata")
+save(merged.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/mergedallcellchat.rdata")
+save(merged.subsetted.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/mergedsubsettedcellchat.rdata")
 
 ### We will run cell chat on a subset of the cell data---just fibroblasts and immune cells
 regenerative.subsetted <- subset(regenerative, idents = c("Fibroblast I", "Fibroblast II", "T cell I", "Myofibroblast I",
@@ -455,7 +460,7 @@ regenerative.subsetted.cc@DB <- CellChatDB.use # Set the database for the fibrot
 regenerative.subsetted.cc <- subsetData(regenerative.subsetted.cc) # We subset the expression data of signalling genes to save on computational cost
 regenerative.subsetted.cc <- identifyOverExpressedGenes(regenerative.subsetted.cc) # Identify over-expressed genes (I wonder how much the pre-processing in Seurat has an effect on this)
 regenerative.subsetted.cc <- identifyOverExpressedInteractions(regenerative.subsetted.cc) # Identify the over-expressed ligand-receptor interactions, which are determined by an over-expressed ligand OR receptor
-regenerative.subsetted.cc <- projectData(regenerative.subsetted.cc, PPI.mouse) # Other option includes PPI.human
+# regenerative.subsetted.cc <- projectData(regenerative.subsetted.cc, PPI.mouse) # Other option includes PPI.human
 
 # We now infer the cell-cell communication network by calculating the communication probabilities
 regenerative.subsetted.cc <- computeCommunProb(regenerative.subsetted.cc) 
@@ -563,8 +568,6 @@ ggsave('~/Documents/Presentations/PostdocTalks/CellChatAnalysisOfGay2020_Sep2020
 # Plot the incoming and outgoing comunication patterns
 netAnalysis_dot(merged.cc, pattern = "incoming")
 
-
-
 save(merged.cc, merged.subsetted.cc, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/gay2020cellchatjointdata.rdata")
 
 ###############################################################################################################################################################
@@ -650,3 +653,135 @@ gay2020.integrated <- RenameIdents(gay2020.integrated, gay2020.integrated.new.id
 DimPlot(gay2020.integrated, reduction = "umap", label=TRUE)
 
 save(gay2020.integrated, gay2020.integrated.new.idents, gay2020.integrated.top10.markers, gay2020.integrated.markers, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/gay2020integrated.rdata")
+load("~/Documents/CellCellCommunicationModelling/Data/Gay2020/gay2020integrated.rdata")
+
+###############################################################################################################################################################
+### Load the original clustered data, now that Max has given it to us.
+###############################################################################################################################################################
+
+load("~/Documents/CellCellCommunicationModelling/Data/Gay2020/wihnfromdenise.robj")
+
+gay2020.orig.markers <- FindAllMarkers(wihnint, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+gay2020.orig.top10.markers <- gay2020.orig.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+gay2020.orig.top50.markers <- gay2020.orig.markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_logFC)
+
+DoHeatmap(wihnint, features = gay2020.orig.top10.markers$gene) + NoLegend()
+
+gay2020.orig.old.idents <- levels(wihnint)
+# Rename the cell clusters using the cell types from Max's SkinGenes website.
+gay2020.orig.new.idents <- c("Fibroblasts-1", "Fibroblasts-2", "Fibroblasts-3", "Fibroblasts-4", "Macrophages/DCs-1", "T cells-1",
+                             "Fibroblasts-5", "Macrophages/DCs-2", "Fibroblasts-6", "T cells-2", "T cells-3", "Endothelial", 
+                             "Macrophages/DCs-3", "Schwann cells", "Macrophages/DCs-4", "Macrophages/DCs-5", "Macrophages/DCs-6",
+                             "Other immune cells")
+names(gay2020.orig.new.idents) <- gay2020.orig.old.idents
+
+# Rename the old clusters
+wihnint <- RenameIdents(wihnint, gay2020.orig.new.idents)
+
+# These are alternative labellings (just in case)
+gay2020.orig.alt.idents <- c("Fibroblasts-1", "Fibroblasts-2", "Fibroblasts-3", "Myofibroblasts", "Macrophages-1", "T cells-1",
+                             "Fibroblasts-4", "Dendritic cells-1", "Fibroblasts-5", "T cells-2", "T cells-3", "Endothelial", 
+                             "Macrophages-2", "Schwann cells", "Macrophages-3", "Dendritic cells-2", "Macrophages-4",
+                             "Mast cells")
+
+gay2020.orig.top50.markers.renamed <- gay2020.orig.top50.markers
+levels(gay2020.orig.top50.markers.renamed$cluster) <- gay2020.orig.new.idents
+
+# write.csv(gay2020.orig.top50.markers.renamed, file = "~/Documents/CellCellCommunicationModelling/Data/Gay2020/Top50Markers.csv")
+
+# Run a quick UMAP
+pct <- wihnint[["pca"]]@stdev / sum(wihnint[["pca"]]@stdev) * 100
+
+# Calculate cumulative percents for each PC
+cumu <- cumsum(pct)
+
+# Determine which PC exhibits cumulative percent greater than 90% and % variation associated with the PC as less than 5
+co1 <- which(cumu > 90 & pct < 5)[1]
+
+# Determine the difference between variation of PC and subsequent PC
+co2 <- sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+num_pcs_integrated <- min(co1, co2)
+
+# Run the UMAP
+wihnint <- RunUMAP(wihnint, reduction = "pca", dims = 1:num_pcs_integrated)
+
+# Split the original data into the fibrotic and merged
+fibrotic <- subset(wihnint, subset = stim == "CTRL")
+fibrotic.subsetted <- subset(fibrotic, idents = c("Fibroblasts-1", "Fibroblasts-2", "Fibroblasts-3", "Fibroblasts-4", "Macrophages/DCs-1", "T cells-1",
+                                                  "Fibroblasts-5", "Macrophages/DCs-2", "Fibroblasts-6", "T cells-2", "T cells-3", 
+                                                  "Macrophages/DCs-3", "Macrophages/DCs-4", "Macrophages/DCs-5", "Macrophages/DCs-6",
+                                                  "Other immune cells"))
+
+regenerative <- subset(wihnint, subset = stim == "STIM")
+regenerative.subsetted <- subset(regenerative, idents = c("Fibroblasts-1", "Fibroblasts-2", "Fibroblasts-3", "Fibroblasts-4", "Macrophages/DCs-1", "T cells-1",
+                                                          "Fibroblasts-5", "Macrophages/DCs-2", "Fibroblasts-6", "T cells-2", "T cells-3", 
+                                                          "Macrophages/DCs-3", "Macrophages/DCs-4", "Macrophages/DCs-5", "Macrophages/DCs-6"))
+
+####################################################################################################################################
+#### Create the new CellChat objects
+#######################################################################################################################################
+
+# First the fibrotic data, full and subsetted
+fibrotic.labels <- Idents(fibrotic)
+fibrotic.identity <- data.frame(group = fibrotic.labels, row.names = names(fibrotic.labels)) # Dataframe of the cell labels
+fibrotic.data.input <- GetAssayData(fibrotic, assay = "RNA", slot = "data")  # Normalised data matrix
+
+fibrotic.cc <- createCellChat(data = fibrotic.data.input, do.sparse = F)
+
+# Add the meta-data from Seurat
+fibrotic.cc <- addMeta(fibrotic.cc, meta = fibrotic.identity, meta.name = "labels") 
+fibrotic.cc <- setIdent(fibrotic.cc, ident.use = "labels") # Set the labels to be the default cell identity
+
+fibroticGroupSize <- as.numeric(table(fibrotic.cc@idents)) # Get the number of cells in each group
+
+fibrotic.cc@DB <- CellChatDB.use # Set the database for the fibrotic data
+
+# Subsetted data
+fibrotic.subsetted.labels <- Idents(fibrotic.subsetted)
+fibrotic.subsetted.identity <- data.frame(group = fibrotic.subsetted.labels, row.names = names(fibrotic.subsetted.labels)) # Dataframe of the cell labels
+fibrotic.subsetted.data.input <- GetAssayData(fibrotic.subsetted, assay = "RNA", slot = "data")  # Normalised data matrix
+
+fibrotic.subsetted.cc <- createCellChat(data = fibrotic.subsetted.data.input, do.sparse = F)
+
+# Add the meta-data from Seurat
+fibrotic.subsetted.cc <- addMeta(fibrotic.subsetted.cc, meta = fibrotic.subsetted.identity, meta.name = "labels") 
+fibrotic.subsetted.cc <- setIdent(fibrotic.subsetted.cc, ident.use = "labels") # Set the labels to be the default cell identity
+
+fibroticSubsettedGroupSize <- as.numeric(table(fibrotic.subsetted.cc@idents)) # Get the number of cells in each group
+
+fibrotic.subsetted.cc@DB <- CellChatDB.use # Set the database for the fibrotic data
+
+# Now the full regenerative data
+regenerative.labels <- Idents(regenerative)
+regenerative.identity <- data.frame(group = regenerative.labels, row.names = names(regenerative.labels)) # Dataframe of the cell labels
+regenerative.data.input <- GetAssayData(regenerative, assay = "RNA", slot = "data")  # Normalised data matrix
+
+regenerative.cc <- createCellChat(data = regenerative.data.input, do.sparse = F)
+
+# Add the meta-data from Seurat
+regenerative.cc <- addMeta(regenerative.cc, meta = regenerative.identity, meta.name = "labels") 
+regenerative.cc <- setIdent(regenerative.cc, ident.use = "labels") # Set the labels to be the default cell identity
+
+regenerativeGroupSize <- as.numeric(table(regenerative.cc@idents)) # Get the number of cells in each group
+
+regenerative.cc@DB <- CellChatDB.use # Set the database for the fibrotic data
+
+# And finally the subsetted data
+regenerative.subsetted.labels <- Idents(regenerative.subsetted)
+regenerative.subsetted.identity <- data.frame(group = regenerative.subsetted.labels, row.names = names(regenerative.subsetted.labels)) # Dataframe of the cell labels
+regenerative.subsetted.data.input <- GetAssayData(regenerative.subsetted, assay = "RNA", slot = "data")  # Normalised data matrix
+
+regenerative.subsetted.cc <- createCellChat(data = regenerative.subsetted.data.input, do.sparse = F)
+
+# Add the meta-data from Seurat
+regenerative.subsetted.cc <- addMeta(regenerative.subsetted.cc, meta = regenerative.identity, meta.name = "labels") 
+regenerative.subsetted.cc <- setIdent(regenerative.subsetted.cc, ident.use = "labels") # Set the labels to be the default cell identity
+
+regenerativeSubsettedGroupSize <- as.numeric(table(regenerative.subsetted.cc@idents)) # Get the number of cells in each group
+
+regenerative.subsetted.cc@DB <- CellChatDB.use # Set the database for the fibrotic data
+
+### Let's now proceed with the CellChat analysis
+
